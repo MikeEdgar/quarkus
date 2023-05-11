@@ -18,7 +18,6 @@ import org.jboss.jandex.IndexView;
 
 import io.quarkus.smallrye.openapi.runtime.filter.DisabledRestEndpointsFilter;
 import io.smallrye.openapi.api.SmallRyeOpenAPI;
-import io.smallrye.openapi.runtime.io.Format;
 
 /**
  * Loads the document and make it available
@@ -70,8 +69,8 @@ public class OpenApiDocumentService {
         }
     }
 
-    public byte[] getDocument(Format format) {
-        if (format.equals(Format.JSON)) {
+     public byte[] getDocument(String mimeType) {
+        if (mimeType.contains("json")) {
             return documentHolder.getJsonDocument();
         }
         return documentHolder.getYamlDocument();
@@ -80,10 +79,12 @@ public class OpenApiDocumentService {
     static class EmptyDocument implements OpenApiDocumentHolder {
         static final byte[] EMPTY = new byte[0];
 
+        @Override
         public byte[] getJsonDocument() {
             return EMPTY;
         }
 
+        @Override
         public byte[] getYamlDocument() {
             return EMPTY;
         }
@@ -102,10 +103,12 @@ public class OpenApiDocumentService {
             yamlDocument = openAPI.toYAML().getBytes(StandardCharsets.UTF_8);
         }
 
+        @Override
         public byte[] getJsonDocument() {
             return this.jsonDocument;
         }
 
+        @Override
         public byte[] getYamlDocument() {
             return this.yamlDocument;
         }
@@ -126,10 +129,12 @@ public class OpenApiDocumentService {
             this.builder = builder;
         }
 
+        @Override
         public byte[] getJsonDocument() {
             return builder.build().toJSON().getBytes(StandardCharsets.UTF_8);
         }
 
+        @Override
         public byte[] getYamlDocument() {
             return builder.build().toYAML().getBytes(StandardCharsets.UTF_8);
         }

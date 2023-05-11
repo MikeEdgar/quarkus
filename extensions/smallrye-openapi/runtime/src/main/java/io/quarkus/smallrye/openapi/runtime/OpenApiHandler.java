@@ -1,11 +1,9 @@
 package io.quarkus.smallrye.openapi.runtime;
 
-import java.util.List;
-
 import io.quarkus.arc.Arc;
-import io.smallrye.openapi.runtime.io.Format;
 import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
@@ -16,50 +14,60 @@ import io.vertx.ext.web.RoutingContext;
  */
 public class OpenApiHandler implements Handler<RoutingContext> {
 
-    private volatile OpenApiDocumentService openApiDocumentService;
     private static final String ALLOWED_METHODS = "GET, HEAD, OPTIONS";
     private static final String QUERY_PARAM_FORMAT = "format";
+    private static final String MIME_TYPE_JSON = "application/json";
+    private static final String MIME_TYPE_YAML = "application/yaml";
 
-    public OpenApiHandler() {
-    }
+    private volatile OpenApiDocumentService openApiDocumentService;
 
     @Override
     public void handle(RoutingContext event) {
         HttpServerRequest req = event.request();
         HttpServerResponse resp = event.response();
+        HttpMethod method = req.method();
 
-        if (req.method().equals(HttpMethod.OPTIONS)) {
-            resp.headers().set("Allow", ALLOWED_METHODS);
-            event.next();
-        } else {
+        if (method.equals(HttpMethod.OPTIONS)) {
+            resp.headers().set(HttpHeaders.ALLOW, ALLOWED_METHODS);
+            resp.setStatusCode(204);
+        } else if (method.equals(HttpMethod.HEAD) || method.equals(HttpMethod.GET)) {
+            String mimeType;
 
-            // Default content type is YAML
-            Format format = Format.YAML;
-
-            String path = event.normalizedPath();
-            // Content negotiation with file extension
-            if (path.endsWith(".json")) {
-                format = Format.JSON;
-            } else if (path.endsWith(".yaml") || path.endsWith(".yml")) {
-                format = Format.YAML;
+            if (jsonAccepted(event) || jsonRequested(event)) {
+                mimeType = MIME_TYPE_JSON;
             } else {
-                // Content negotiation with Accept header
-                String accept = req.headers().get("Accept");
-
-                List<String> formatParams = event.queryParam(QUERY_PARAM_FORMAT);
-                String formatParam = formatParams.isEmpty() ? null : formatParams.get(0);
-
-                // Check Accept, then query parameter "format" for JSON; else use YAML.
-                if ((accept != null && accept.contains(Format.JSON.getMimeType())) ||
-                        ("JSON".equalsIgnoreCase(formatParam))) {
-                    format = Format.JSON;
-                }
+                // Default content type is YAML
+                mimeType = MIME_TYPE_YAML;
             }
 
-            resp.headers().set("Content-Type", format.getMimeType() + ";charset=UTF-8");
-            byte[] schemaDocument = getOpenApiDocumentService().getDocument(format);
-            resp.end(Buffer.buffer(schemaDocument));
+            resp.headers().set(HttpHeaders.CONTENT_TYPE, mimeType + ";charset=UTF-8");
+            byte[] schemaDocument = getOpenApiDocumentService().getDocument(mimeType);
+            resp.headers().set(HttpHeaders.CONTENT_LENGTH, Integer.toString(schemaDocument.length));
+
+            if (method.equals(HttpMethod.GET)) {
+                resp.write(Buffer.buffer(schemaDocument));
+            }
+        } else {
+            resp.setStatusCode(405);
         }
+
+        resp.end();
+    }
+
+    private boolean jsonAccepted(RoutingContext event) {
+        // Content negotiation with Accept header
+        for (var accept : event.parsedHeaders().accept()) {
+            if (MIME_TYPE_JSON.equals(accept.value())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean jsonRequested(RoutingContext event) {
+        String path = event.normalizedPath();
+        return path.endsWith(".json") || "JSON".equalsIgnoreCase(event.queryParams().get(QUERY_PARAM_FORMAT));
     }
 
     private OpenApiDocumentService getOpenApiDocumentService() {
