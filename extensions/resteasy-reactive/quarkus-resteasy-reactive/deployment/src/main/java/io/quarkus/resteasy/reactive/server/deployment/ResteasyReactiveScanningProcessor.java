@@ -4,6 +4,7 @@ import static io.quarkus.resteasy.reactive.common.deployment.QuarkusResteasyReac
 import static io.quarkus.resteasy.reactive.common.deployment.QuarkusResteasyReactiveDotNames.HTTP_SERVER_RESPONSE;
 import static io.quarkus.resteasy.reactive.common.deployment.QuarkusResteasyReactiveDotNames.ROUTING_CONTEXT;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
 
 import jakarta.transaction.RollbackException;
@@ -118,9 +120,17 @@ public class ResteasyReactiveScanningProcessor {
     }
 
     @BuildStep
-    public List<UnwrappedExceptionBuildItem> defaultUnwrappedException() {
-        return List.of(new UnwrappedExceptionBuildItem(ArcUndeclaredThrowableException.class),
-                new UnwrappedExceptionBuildItem(RollbackException.class));
+    public List<UnwrappedExceptionBuildItem> defaultUnwrappedException(ResteasyReactiveServerConfig serverConfig) {
+        List<UnwrappedExceptionBuildItem> unwrapped = new ArrayList<>();
+
+        unwrapped.add(new UnwrappedExceptionBuildItem(ArcUndeclaredThrowableException.class));
+        unwrapped.add(new UnwrappedExceptionBuildItem(RollbackException.class));
+
+        if (serverConfig.unwrapCompletionException()) {
+            unwrapped.add(new UnwrappedExceptionBuildItem(CompletionException.class));
+        }
+
+        return unwrapped;
     }
 
     @BuildStep

@@ -2,6 +2,9 @@ package io.quarkus.resteasy.reactive.server.test.customexceptions;
 
 import static io.quarkus.resteasy.reactive.server.test.ExceptionUtil.removeStackTrace;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
 
 import jakarta.ws.rs.Path;
@@ -9,6 +12,7 @@ import jakarta.ws.rs.core.Response;
 
 import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
+import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -26,7 +30,8 @@ public class UnwrappedExceptionTest {
                 @Override
                 public JavaArchive get() {
                     return ShrinkWrap.create(JavaArchive.class)
-                            .addClasses(ExceptionResource.class, ExceptionMappers.class, ExceptionUtil.class);
+                            .addClasses(ExceptionResource.class, ExceptionMappers.class, ExceptionUtil.class)
+                            .add(new StringAsset("quarkus.resteasy-reactive.unwrap-completion-exception=true"), "application.properties");
                 }
             });
 
@@ -54,6 +59,18 @@ public class UnwrappedExceptionTest {
                 .then().statusCode(999);
     }
 
+    @Test
+    public void testAsyncWrapperWithUnmappedException() {
+        RestAssured.get("/hello/asyncWrapperOfIAE")
+                .then().statusCode(500);
+    }
+
+    @Test
+    public void testAsyncWrapperWithMappedException() {
+        RestAssured.get("/hello/asyncWrapperOfISE")
+                .then().statusCode(999);
+    }
+
     @Path("hello")
     public static class ExceptionResource {
 
@@ -65,6 +82,16 @@ public class UnwrappedExceptionTest {
         @Path("wrapperOfISE")
         public String wrapperOfISE() {
             throw removeStackTrace(new ArcUndeclaredThrowableException(removeStackTrace(new IllegalStateException())));
+        }
+
+        @Path("asyncWrapperOfIAE")
+        public CompletionStage<String> asyncWrapperOfIAE() {
+            return CompletableFuture.failedStage(removeStackTrace(new CompletionException(removeStackTrace(new IllegalArgumentException()))));
+        }
+
+        @Path("asyncWrapperOfISE")
+        public CompletionStage<String> asyncWrapperOfISE() {
+            return CompletableFuture.failedStage(removeStackTrace(new CompletionException(removeStackTrace(new IllegalStateException()))));
         }
 
         @Path("iae")
